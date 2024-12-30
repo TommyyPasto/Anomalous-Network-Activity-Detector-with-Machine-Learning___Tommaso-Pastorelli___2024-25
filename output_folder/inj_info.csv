@@ -1,0 +1,6 @@
+start,end,inj_name
+1735600151658,1735600153659,[network_anomaly]NetworkTrafficInjection->malformed_packets(duration: 2000)
+1735600159665,1735600161667,[network_anomaly]NetworkTrafficInjection->malformed_packets(duration: 2000)
+1735600162668,1735600164677,[network_anomaly]NetworkTrafficInjection->malformed_packets(duration: 2000)
+1735600167680,1735600169689,[network_anomaly]NetworkTrafficInjection->malformed_packets(duration: 2000)
+1735600170691,1735600172694,[network_anomaly]NetworkTrafficInjection->malformed_packets(duration: 2000)

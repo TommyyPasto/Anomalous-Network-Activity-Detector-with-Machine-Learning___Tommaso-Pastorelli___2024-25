@@ -1,0 +1,9 @@
+[
+    {
+        "type": "NetworkTraffic",
+        "tag": "network_anomaly",
+        "duration_ms": 5000,
+        "target_ip": "127.0.0.1",
+        "target_port": 13000
+    }
+]
