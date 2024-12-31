@@ -40,6 +40,6 @@ This project is still under development. Usage and installation instructions wil
 ## Repository Details
 - **Repository Name:** Anomalous-Network-Activity-Detector-with-Machine-Learning---Tommaso-Pastorelli---2024-25
 - **Author:** [Tommaso Pastorelli](https://github.com/TommyyPasto)
-- **Created on:** December 30, 2024
+- **Created on:** December 23, 2024
 - **Last Updated:** December 30, 2024
 - **License:** Not specified
