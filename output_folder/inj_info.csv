@@ -1,6 +1,7 @@
 start,end,inj_name
-1735600151658,1735600153659,[network_anomaly]NetworkTrafficInjection->malformed_packets(duration: 2000)
-1735600159665,1735600161667,[network_anomaly]NetworkTrafficInjection->malformed_packets(duration: 2000)
-1735600162668,1735600164677,[network_anomaly]NetworkTrafficInjection->malformed_packets(duration: 2000)
-1735600167680,1735600169689,[network_anomaly]NetworkTrafficInjection->malformed_packets(duration: 2000)
-1735600170691,1735600172694,[network_anomaly]NetworkTrafficInjection->malformed_packets(duration: 2000)
+1736002509127,1736002518580,[port scanning]PortScanningInjector(duration: 2000)
+1736002520585,1736002522588,[packet flooding]PacketFloodingInjector(duration: 2000)
+1736002524591,1736002526598,[ip spoofing]IPSpoofingInjector(duration: 2000)
+1736002528599,1736002530602,[oversized packets]OversizedPacketsInjector(duration: 2000)
+1736002532608,1736002534608,[fragmented packets]FragmentedPacketsInjector(duration: 2000)
+1736002536613,1736002538616,[malformed packets]MalformedPacketsInjector(duration: 2000)

@@ -1,9 +1,43 @@
 [
     {
-        "type": "NetworkTraffic",
-        "tag": "network_anomaly",
-        "duration_ms": 5000,
-        "target_ip": "127.0.0.1",
-        "target_port": 13000
+        "type": "PortScanningInjector",
+        "tag": "port scanning",
+        "duration_ms": 2000,
+        "target_ip": "192.168.1.8"
+    },
+    {
+        "type": "PacketFloodingInjector",
+        "tag": "packet flooding",
+        "duration_ms": 2000,
+        "target_ip": "192.168.1.8",
+        "target_port": 13043
+    },
+    {
+        "type": "IPSpoofingInjector",
+        "tag": "ip spoofing",
+        "duration_ms": 2000,
+        "target_ip": "192.168.1.8",
+        "target_port": 10012
+    },
+    {
+        "type": "OversizedPacketsInjector",
+        "tag": "oversized packets",
+        "duration_ms": 2000,
+        "target_ip": "192.168.1.8",
+        "target_port": 22312
+    },
+    {
+        "type": "FragmentedPacketsInjector",
+        "tag": "fragmented packets",
+        "duration_ms": 2000,
+        "target_ip": "192.168.1.8",
+        "target_port": 25122
+    },
+    {
+        "type": "MalformedPacketsInjector",
+        "tag": "malformed packets",
+        "duration_ms": 2000,
+        "target_ip": "192.168.1.8",
+        "target_port": 30245
     }
 ]
