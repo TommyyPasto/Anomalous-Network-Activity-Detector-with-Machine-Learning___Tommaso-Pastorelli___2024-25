@@ -7,6 +7,10 @@ from tqdm import tqdm
 import sys
 #from NetworkLoadInjector import LoadInjector, current_ms
 from NetworkLoadInjector import *
+""" 
+# Synchronization primitives
+traffic_semaphore = threading.Semaphore(1)
+injection_semaphore = threading.Semaphore(0) """
 
 def main_injector(max_n_obs: int, injectors: list, obs_interval_sec: int = 1, inj_duration_sec: int = 1, randomize:bool = False,
                   inj_cooldown_sec: int = 2, verbose: bool = True):
@@ -20,14 +24,14 @@ def main_injector(max_n_obs: int, injectors: list, obs_interval_sec: int = 1, in
     :param max_n_obs: maximum number of observations (no longer used)
     :return: list of dictionaries containing activations of injections
     """
+    
 
-    # Injection Loop
-    print('Injector Started. Running for %d injectors' % len(injectors))
-    cycle_ms = obs_interval_sec * 1000
-
+    activations = []
     if injectors is not None and len(injectors) > 0:
         for inj_index in tqdm(range(len(injectors)), desc='Injector Progress Bar'):
-            start_ms = current_ms()
+            # Wait for traffic semaphore to ensure monitor is ready
+            #traffic_semaphore.acquire()
+
             current_inj = injectors[inj_index]
 
             # Check if injector is not already running
@@ -36,30 +40,25 @@ def main_injector(max_n_obs: int, injectors: list, obs_interval_sec: int = 1, in
                     print("Injecting with injector '%s'" % current_inj.get_name())
 
                 # Starts the injection thread
-                current_inj.inject()
-
+                thread = current_inj.inject()
+                activations.append({"start": time.time(), "inj_name": current_inj.get_name()})
+                thread.join()
+                
                 # Wait for the injection duration
-                time.sleep(inj_duration_sec)
+                #time.sleep(inj_duration_sec)
 
                 # Cooldown period
-                time.sleep(inj_cooldown_sec)
+                #if verbose:
+                    #print(f"Cooling down after injector '{current_inj.get_name()}'...")
+                #time.sleep(inj_cooldown_sec)
 
-            # Sleep to synchronize with cycle time
-            sleep_s = (cycle_ms - (current_ms() - start_ms)) / 1000.0
-            if sleep_s > 0:
-                time.sleep(sleep_s)
+                activations[-1]["end"] = time.time()
+
+            # Signal monitor to capture the next phase
+            #injection_semaphore.release()
 
     else:
         print("No injectors were set for this experimental campaign")
-
-    activations = []
-    for inj in injectors:
-        inj_log = inj.get_injections()
-        if inj_log is not None and len(inj_log) > 0:
-            new_inj = [dict(item, inj_name=inj.get_name()) for item in inj_log]
-            activations.extend(new_inj)
-            if verbose:
-                print("Injections with injector '" + str(inj.get_name()) + "': " + str(len(new_inj)))
 
     return activations
 
@@ -110,6 +109,13 @@ def read_injectors(json_object, inj_duration: int = 2000, verbose: bool = True):
     return injectors
 
 
+
+def stop_execution():
+    print("Stopping injector and monitor threads.")
+    os._exit(0)
+
+
+
 if __name__ == "__main__":
     """
     Entry point for the Injector
@@ -117,8 +123,7 @@ if __name__ == "__main__":
     # General variables
     out_folder = 'output_folder'
     inj_filename = 'inj_info.csv'
-    #inj_json = 'input/injectors_json.json'
-    inj_duration_sec = 2
+    inj_duration_sec = 3
     exp_duration = 20
     randomize = False
     
@@ -145,25 +150,30 @@ if __name__ == "__main__":
     # Extracting definitions of injectors from input JSON
     injectors = read_injectors(inj_json, inj_duration=inj_duration_sec * 1000)
 
-    # Calling injection routine
-    inj_timestamps = main_injector(max_n_obs=(inj_duration_sec+1) * injectors.__len__(),
-                                   injectors=injectors,
-                                   obs_interval_sec=inj_duration_sec,
-                                   inj_duration_sec=inj_duration_sec,
-                                   inj_cooldown_sec=0,
-                                   randomize=randomize,
-                                   #inj_probability=0.4,
-                                   verbose=True)
+    try:
+        # Calling injection routine
+        inj_timestamps = main_injector(max_n_obs=(inj_duration_sec+1) * injectors.__len__(),
+                                    injectors=injectors,
+                                    obs_interval_sec=inj_duration_sec,
+                                    inj_duration_sec=inj_duration_sec,
+                                    inj_cooldown_sec=0,
+                                    randomize=randomize,
+                                    verbose=True)
 
-    # Ensure output folder exists
-    if not os.path.exists(out_folder):
-        os.mkdir(out_folder)
+        # Ensure output folder exists
+        if not os.path.exists(out_folder):
+            os.mkdir(out_folder)
 
-    # Save injection logs to CSV
-    inj_filename = os.path.join(out_folder, inj_filename)
-    with open(inj_filename, 'w', newline='') as myFile:
-        writer = csv.writer(myFile)
-        keys = ['start', 'end', 'inj_name']
-        writer.writerow(keys)
-        for dictionary in inj_timestamps:
-            writer.writerow([str(dictionary[d_key]) for d_key in keys])
+        # Save injection logs to CSV
+        inj_filename = os.path.join(out_folder, inj_filename)
+        with open(inj_filename, 'w', newline='') as myFile:
+            writer = csv.writer(myFile)
+            keys = ['start', 'end', 'inj_name']
+            writer.writerow(keys)
+            for dictionary in inj_timestamps:
+                writer.writerow([str(dictionary[d_key]) for d_key in keys])
+                
+    except KeyboardInterrupt:
+        stop_execution()
+        
+        

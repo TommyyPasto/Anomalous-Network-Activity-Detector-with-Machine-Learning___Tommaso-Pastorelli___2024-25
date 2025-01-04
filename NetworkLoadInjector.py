@@ -67,6 +67,7 @@ class LoadInjector:
         """
         self.inj_thread = threading.Thread(target=self.inject_body(), args=())
         self.inj_thread.start()
+        return self.inj_thread 
 
     def is_injector_running(self):
         """
@@ -106,7 +107,7 @@ class LoadInjector:
 
 # NETWORK TRAFFIC INJECTION
 
-from scapy.all import IP, TCP, UDP, ICMP, send, sendp, fragment, show_interfaces, Ether, ARP, srp1, conf
+from scapy.all import IP, TCP, UDP, ICMP, send, fragment, show_interfaces, Ether, ARP, srp1, conf, Raw
 import random
 import time
 
@@ -234,11 +235,14 @@ class PortScanningInjector(NetworkLoadInjector):
         """
         Simulate port scanning by sending SYN packets to a range of ports.
         """
+        end_time = time.time() + (self.duration_ms / 1000)
         print(f"[{self.tag}] Starting port scanning on {self.target_ip}/{self.target_port}")
-        for port in range(1, 1024):  # Scan ports 1-1024
+        port = 0
+        while time.time() < end_time:  # Scan ports 1-1024
             print("Sending packet to IP: " + self.target_ip + "/" + str(port))
-            packet = IP(dst=self.target_ip)/TCP(dport=port, flags="S")
+            packet = IP(src=random_ip(), dst=self.target_ip)/TCP(dport=port, flags="S")
             send(packet,   verbose=False)
+            port += 1
         
     def get_name(self) -> str:
         """
@@ -266,7 +270,7 @@ class PacketFloodingInjector(NetworkLoadInjector):
         print(f"[{self.tag}] Starting packet flooding on {self.target_ip}/{self.target_port}")
         end_time = time.time() + (self.duration_ms / 1000)
         while time.time() < end_time:
-            packet = IP(dst=self.target_ip)/TCP(dport=self.target_port, flags="S")
+            packet = IP(src=random_ip(), dst=self.target_ip)/TCP(ack = random.randint(100000,999999999),dport=self.target_port, flags="S")
             send(packet,  verbose=False)
     
     def get_name(self) -> str:
@@ -296,9 +300,8 @@ class IPSpoofingInjector(NetworkLoadInjector):
         """
         print(f"[{self.tag}] Starting IP spoofing towards  {self.target_ip}/{self.target_port}")
         end_time = time.time() + (self.duration_ms / 1000)
-        spoofed_ips = [f"10.0.0.{i}" for i in range(1, 255)]  # Generate fake IPs
         while time.time() < end_time:
-            fake_ip = random.choice(spoofed_ips)
+            fake_ip = random_ip()
             print("Sending packet to IP: " + self.target_ip + "/" + str(self.target_port))
             packet = IP(src=fake_ip, dst=self.target_ip)/TCP(dport=random.randint(13000, 14000), flags="S")
             send(packet, verbose=False)
@@ -330,10 +333,12 @@ class OversizedPacketsInjector(NetworkLoadInjector):
         Send oversized packets to the target.
         """
         print(f"[{self.tag}] Sending oversized packets to  {self.target_ip}/{self.target_port}")
-        payload = "X" * random.randrange(self.size, self.size + 5000, 1)  # Create a large payload
         end_time = time.time() + (self.duration_ms / 1000)
+        payload = "X" * self.size  # Create a large payload
         while time.time() < end_time:
-            packet = IP(dst=self.target_ip)/TCP(dport=self.target_port, flags="S")/payload
+            packet = IP(src=random_ip(), dst=self.target_ip)/TCP(dport=self.target_port, flags="S")/Raw(load=payload)
+            """ payl = packet.lastlayer()
+            payl.load = payload """
             send(packet, verbose=False)        
     
     def get_name(self) -> str:
@@ -364,12 +369,15 @@ class FragmentedPacketsInjector(NetworkLoadInjector):
         """
         Send fragmented packets to the target.
         """
+        end_time = time.time() + (self.duration_ms / 1000)
         print(f"[{self.tag}] Sending fragmented packets to  {self.target_ip}/{self.target_port}")
-        payload = "A" * self.payload_size  # Large payload
-        packet = IP(dst=self.target_ip)/UDP(dport=self.target_port)/payload
-        fragments = fragment(packet, fragsize = self.frag_size)
-        for frag in fragments:
-            send(frag, verbose=False)
+        while time.time() < end_time:
+            payload = "A" * self.payload_size  # Large payload
+            packet = IP(src=random_ip(), dst=self.target_ip)/TCP(dport=self.target_port)/payload
+            fragments = fragment(packet, fragsize = self.frag_size)
+            for frag in fragments:
+                print("Sending fragmented packet to IP: " + self.target_ip + "/" + str(self.target_port))
+                send(frag, verbose=False)
     
     def get_name(self) -> str:
         """
@@ -401,23 +409,20 @@ class MalformedPacketsInjector(NetworkLoadInjector):
         end_time = time.time() + (self.duration_ms / 1000)
         print(f"[{self.tag}] Sending malformed packets to  {self.target_ip}/{self.target_port}")
         while time.time() < end_time:
-            # Example 1: Invalid TCP flag combination (SYN + FIN)
-            packet1 = IP(dst=self.target_ip)/TCP(dport=self.target_port, flags="SF")  # SYN+FIN
-            
-            # Example 2: Corrupted TCP sequence number
-            packet2 = IP(dst=self.target_ip)/TCP(dport=self.target_port, seq=42949672)  # Invalid seq number
+            # Example: Invalid TCP flag values, seq value, ack value, IP version, etc.
+            packet = IP(src=random_ip(), dst=self.target_ip, version=6)/TCP(dport=self.target_port, flags=random.randint(0,999), seq=random.randint(1000000, 9999999999),  ack=random.randint(100000,9999999999))  # error in flags and invalid seq number
 
-            # Example 3: Invalid IP version
-            packet3 = IP(dst=self.target_ip, version=6)/TCP(dport=self.target_port)  # Force IPv6 version in IPv4 packet
-
-            invalidPackets = {
-                "SYN+FIN": packet1,
+            """ # Example 3: Invalid IP version
+            packet3 = IP(src=random_ip(), dst=self.target_ip, version=6)/TCP(dport=self.target_port)  # Force IPv6 version in IPv4 packet
+ """
+            """ invalidPackets = {
+                "InavlidFlags": packet1,
                 "InvalidSeq": packet2,
-                "InvalidIPVersion": packet3
+                #"InvalidIPVersion": packet3
             }
-            packetType = random.choice(list(invalidPackets.keys()))   
-            #print(f"chosen invalid packet: {packetType}")  
-            send(invalidPackets[packetType], verbose=False)
+            packetType = random.choice(list(invalidPackets.keys()))    """
+            #print("Sending malformed packet to IP: " + self.target_ip + "/" + str(self.target_port))
+            send(packet, verbose=True)
 
     def get_name(self) -> str:
         """
@@ -448,7 +453,7 @@ class ProtocolAnomaliesInjector(NetworkLoadInjector):
         print(f"[{self.tag}] Sending protocol anomalies to  {self.target_ip}/{self.target_port}")
         for _ in range(num_packets):
             # Send ICMP Echo packets (ping packets basically)
-            packet = IP(dst=self.target_ip)/ICMP()
+            packet = IP(src=random_ip(), dst=self.target_ip)/ICMP()
             send(packet,   verbose=False)           
     
     def get_name(self) -> str:
