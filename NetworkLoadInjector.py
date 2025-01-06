@@ -107,9 +107,27 @@ class LoadInjector:
 
 # NETWORK TRAFFIC INJECTION
 
-from scapy.all import IP, TCP, UDP, ICMP, send, fragment, show_interfaces, Ether, ARP, srp1, conf, Raw
+from scapy.all import (
+    TCP, 
+    UDP, 
+    SCTP,
+)
+from scapy.all import send, fragment, show_interfaces, Ether, Raw, DNS, DNSQR, DNSRR
+from scapy.all import (
+    IP,      # Internet Protocol v4
+    IPv6,    # Internet Protocol v6
+    ARP,     # Address Resolution Protocol
+    ICMP,    # Internet Control Message Protocol
+    GRE,     # Generic Routing Encapsulation
+    AH,      # Authentication Header
+    ESP      # Encapsulating Security Payload
+)
 import random
 import time
+
+L4_PROTOCOLS = [UDP, TCP]
+L3_PROTOCOLS = [IP, IPv6, ARP, ICMP, GRE, AH, ESP]
+
 
 class NetworkLoadInjector(LoadInjector):
     """
@@ -123,7 +141,7 @@ class NetworkLoadInjector(LoadInjector):
     - Protocol_anomalies
     """
 
-    def __init__(self, tag: str = '', duration_ms: float = 5000, target_ip: str = "127.0.0.1", target_port: int = 13000):
+    def __init__(self, tag: str = '', duration_ms: float = 5000, target_ip: str = "127.0.0.1", target_port: int = 80):
         """
         Constructor for NetworkTrafficInjection
         :param tag: Tag for the injector
@@ -227,9 +245,10 @@ class NetworkLoadInjector(LoadInjector):
 # INJECTOR IMPLEMENTATIONS        
 
 class PortScanningInjector(NetworkLoadInjector):
-    def __init__(self, tag: str = '', duration_ms: float = 1000, target_ip: str = "127.0.0.1"):
+    def __init__(self, tag: str = '', duration_ms: float = 1000, source_ip:str = None, target_ip: str = "127.0.0.1"):
         super().__init__(tag, duration_ms, target_ip)
         self.chosen_method = self.port_scanning
+        self.source_ip = source_ip
     
     def port_scanning(self):
         """
@@ -237,10 +256,14 @@ class PortScanningInjector(NetworkLoadInjector):
         """
         end_time = time.time() + (self.duration_ms / 1000)
         print(f"[{self.tag}] Starting port scanning on {self.target_ip}/{self.target_port}")
+        
         port = 0
         while time.time() < end_time:  # Scan ports 1-1024
+            #defining a random source ip if its not defined
+            src_ip = random_ip() if(self.source_ip==None) else self.source_ip
             print("Sending packet to IP: " + self.target_ip + "/" + str(port))
-            packet = IP(src=random_ip(), dst=self.target_ip)/TCP(dport=port, flags="S")
+            l4_protocol = random.choice(L4_PROTOCOLS)
+            packet = IP(src=src_ip, dst=self.target_ip)/l4_protocol(sport = random.randint(1, 60000), dport=port, flags=random.choice(["S","A","F"]))
             send(packet,   verbose=False)
             port += 1
         
@@ -254,14 +277,16 @@ class PortScanningInjector(NetworkLoadInjector):
     def fromJSON(cls, job):   
         tag=(job['tag'] if 'tag' in job else '')
         duration_ms=(job['duration_ms'] if 'duration_ms' in job else 1000)
+        source_ip = (job['source_ip'] if 'source_ip' in job else None)
         target_ip=(job['target_ip'] if 'target_ip' in job else '127.0.0.1')
-        return PortScanningInjector(tag, duration_ms, target_ip)  
+        return PortScanningInjector(tag, duration_ms, source_ip, target_ip)  
 
 
 class PacketFloodingInjector(NetworkLoadInjector):
-    def __init__(self, tag: str = '', duration_ms: float = 1000, target_ip: str = "127.0.0.1", target_port: int = 13000):
+    def __init__(self, tag: str = '', duration_ms: float = 1000, source_ip:str = None, target_ip: str = "127.0.0.1", target_port: int = 80):
         super().__init__(tag, duration_ms, target_ip, target_port)
         self.chosen_method = self.packet_flooding
+        self.source_ip = source_ip
    
     def packet_flooding(self):
         """
@@ -269,8 +294,9 @@ class PacketFloodingInjector(NetworkLoadInjector):
         """
         print(f"[{self.tag}] Starting packet flooding on {self.target_ip}/{self.target_port}")
         end_time = time.time() + (self.duration_ms / 1000)
+        src_ip = random_ip() if(self.source_ip==None) else self.source_ip
         while time.time() < end_time:
-            packet = IP(src=random_ip(), dst=self.target_ip)/TCP(ack = random.randint(100000,999999999),dport=self.target_port, flags="S")
+            packet = IP(src=src_ip, dst=self.target_ip)/TCP(sport = random.randint(1, 60000), dport=(random.randint(1,60000) if(self.target_port==None) else self.target_port), flags=random.choice(["S","A","F"]))
             send(packet,  verbose=False)
     
     def get_name(self) -> str:
@@ -283,14 +309,14 @@ class PacketFloodingInjector(NetworkLoadInjector):
     def fromJSON(cls, job):
         tag=(job['tag'] if 'tag' in job else '')
         duration_ms=(job['duration_ms'] if 'duration_ms' in job else 1000)
+        source_ip = (job['source_ip'] if 'source_ip' in job else None)
         target_ip=(job['target_ip'] if 'target_ip' in job else '127.0.0.1')
-        target_port=(job['target_port'] if 'target_port' in job else 13000)
-        return PacketFloodingInjector(tag, duration_ms, target_ip, target_port)
+        target_port=(job['target_port'] if 'target_port' in job else 80)
+        return PacketFloodingInjector(tag, duration_ms, source_ip, target_ip, target_port)
           
 
-
 class IPSpoofingInjector(NetworkLoadInjector):
-    def __init__(self, tag: str = '', duration_ms: float = 1000, target_ip: str = "127.0.0.1", target_port: int = 13000):
+    def __init__(self, tag: str = '', duration_ms: float = 1000, target_ip: str = "127.0.0.1", target_port:int = 80):
         super().__init__(tag, duration_ms, target_ip, target_port)
         self.chosen_method = self.ip_spoofing
         
@@ -303,7 +329,7 @@ class IPSpoofingInjector(NetworkLoadInjector):
         while time.time() < end_time:
             fake_ip = random_ip()
             print("Sending packet to IP: " + self.target_ip + "/" + str(self.target_port))
-            packet = IP(src=fake_ip, dst=self.target_ip)/TCP(dport=random.randint(13000, 14000), flags="S")
+            packet = IP(src=fake_ip, dst=self.target_ip)/TCP(sport = random.randint(1, 60000), dport=(random.randint(1,60000) if(self.target_port==None) else self.target_port), flags=random.choice(["S","A","F"]))
             send(packet, verbose=False)
     
     def get_name(self) -> str:
@@ -317,28 +343,33 @@ class IPSpoofingInjector(NetworkLoadInjector):
         tag=(job['tag'] if 'tag' in job else '')
         duration_ms=(job['duration_ms'] if 'duration_ms' in job else 1000)
         target_ip=(job['target_ip'] if 'target_ip' in job else '127.0.0.1')
-        target_port=(job['target_port'] if 'target_port' in job else 13000)
+        target_port=(job['target_port'] if 'target_port' in job else 80)
         return IPSpoofingInjector(tag, duration_ms, target_ip, target_port)
     
 
 
+
+
 class OversizedPacketsInjector(NetworkLoadInjector):
-    def __init__(self, tag: str = '', duration_ms: float = 1000, target_ip: str = "127.0.0.1", target_port: int = 13000, size:int = 2000):
+    def __init__(self, tag: str = '', duration_ms: float = 1000, source_ip:str = None, target_ip: str = "127.0.0.1", target_port: int = 80, size:int = 1000):
         super().__init__(tag, duration_ms, target_ip, target_port)
         self.chosen_method = self.oversized_packets
         self.size = size
+        self.source_ip = source_ip
             
     def oversized_packets(self):
         """
         Send oversized packets to the target.
         """
         print(f"[{self.tag}] Sending oversized packets to  {self.target_ip}/{self.target_port}")
+        
         end_time = time.time() + (self.duration_ms / 1000)
         payload = "X" * self.size  # Create a large payload
         while time.time() < end_time:
-            packet = IP(src=random_ip(), dst=self.target_ip)/TCP(dport=self.target_port, flags="S")/Raw(load=payload)
-            """ payl = packet.lastlayer()
-            payl.load = payload """
+            #defining a random source ip if its not defined
+            src_ip = random_ip() if(self.source_ip==None) else self.source_ip
+            l4_protocol = random.choice(L4_PROTOCOLS)
+            packet = IP(src=src_ip, dst=self.target_ip)/l4_protocol(sport = random.randint(1, 60000), dport = self.target_port)/Raw(load = payload) #IP(dst="192.168.1.8")/TCP(dport=80, sport=12345)/Raw(load="A" * 1000)     IP(dst=self.target_ip)/UDP(dport = 80, flags=random.choice(["S","A","F"]))#/Raw(load = payload)
             send(packet, verbose=False)        
     
     def get_name(self) -> str:
@@ -351,30 +382,40 @@ class OversizedPacketsInjector(NetworkLoadInjector):
     def fromJSON(cls, job):
         tag=(job['tag'] if 'tag' in job else '')
         duration_ms=(job['duration_ms'] if 'duration_ms' in job else 1000)
+        source_ip = (job['source_ip'] if 'source_ip' in job else None)
         target_ip=(job['target_ip'] if 'target_ip' in job else '127.0.0.1')
-        target_port=(job['target_port'] if 'target_port' in job else 13000)
+        target_port=(job['target_port'] if 'target_port' in job else 80)
         size=(job['size'] if 'size' in job else 2000)    
-        return OversizedPacketsInjector(tag, duration_ms, target_ip, target_port, size)
+        return OversizedPacketsInjector(tag, duration_ms, source_ip, target_ip, target_port, size)
 
 
 
 class FragmentedPacketsInjector(NetworkLoadInjector):
-    def __init__(self, tag: str = '', duration_ms: float = 1000, target_ip: str = "127.0.0.1", target_port: int = 13000, payload_size:int = 5000, frag_size:int = 500):
+    def __init__(self, tag: str = '', duration_ms: float = 1000, source_ip:str = None, target_ip: str = "127.0.0.1", target_port: int = 80, payload_size:int = 500, frag_size:int = 50):
         super().__init__(tag, duration_ms, target_ip, target_port)
         self.chosen_method = self.fragmented_packets
         self.payload_size = payload_size
         self.frag_size = frag_size
+        self.source_ip = source_ip
         
     def fragmented_packets(self):
         """
         Send fragmented packets to the target.
         """
-        end_time = time.time() + (self.duration_ms / 1000)
         print(f"[{self.tag}] Sending fragmented packets to  {self.target_ip}/{self.target_port}")
-        while time.time() < end_time:
-            payload = "A" * self.payload_size  # Large payload
-            packet = IP(src=random_ip(), dst=self.target_ip)/TCP(dport=self.target_port)/payload
+        
+        while time.time() < end_time: 
+            #defining a random source ip if its not defined
+            src_ip = random_ip() if(self.source_ip==None) else self.source_ip
+            
+            #choosing the layer 4 protocol randomly
+            l4_protocol = random.choice(L4_PROTOCOLS)
+            
+            #creating the packet to fragment
+            payload = "A" * self.payload_size
+            packet = IP(src=src_ip, dst=self.target_ip)/l4_protocol(sport = random.randint(1, 60000), dport=(random.randint(1,60000) if(self.target_port==None) else self.target_port))/Raw(load = payload)
             fragments = fragment(packet, fragsize = self.frag_size)
+            end_time = time.time() + (self.duration_ms / 1000)  
             for frag in fragments:
                 print("Sending fragmented packet to IP: " + self.target_ip + "/" + str(self.target_port))
                 send(frag, verbose=False)
@@ -389,38 +430,37 @@ class FragmentedPacketsInjector(NetworkLoadInjector):
     def fromJSON(cls, job):
         tag=(job['tag'] if 'tag' in job else '')
         duration_ms=(job['duration_ms'] if 'duration_ms' in job else 1000)
+        source_ip = (job['source_ip'] if 'source_ip' in job else None)
         target_ip=(job['target_ip'] if 'target_ip' in job else '127.0.0.1')
-        target_port=(job['target_port'] if 'target_port' in job else 13000)
-        payload_size=(job['payload_size'] if 'payload_size' in job else 5000)
-        frag_size=(job['frag_size'] if 'frag_size' in job else 500)
-        return FragmentedPacketsInjector(tag, duration_ms, target_ip, target_port, payload_size, frag_size)
+        target_port=(job['target_port'] if 'target_port' in job else 80)
+        payload_size=(job['payload_size'] if 'payload_size' in job else 500)
+        frag_size=(job['frag_size'] if 'frag_size' in job else 50)
+        return FragmentedPacketsInjector(tag, duration_ms, source_ip, target_ip, target_port, payload_size, frag_size)
+
+
 
 
 
 class MalformedPacketsInjector(NetworkLoadInjector):
-    def __init__(self, tag: str = '', duration_ms: float = 1000, target_ip: str = "127.0.0.1", target_port: int = 13000):
+    def __init__(self, tag: str = '', duration_ms: float = 1000, source_ip:str = None, target_ip: str = "127.0.0.1", target_port: int = 80):
         super().__init__(tag, duration_ms, target_ip, target_port)
         self.chosen_method = self.malformed_packets
+        self.source_ip = source_ip
 
     def malformed_packets(self, num_packets=80):
         """
         Send malformed packets to the target.
         """
-        end_time = time.time() + (self.duration_ms / 1000)
         print(f"[{self.tag}] Sending malformed packets to  {self.target_ip}/{self.target_port}")
+        
+        end_time = time.time() + (self.duration_ms / 1000)
         while time.time() < end_time:
+            
+            #defining a random source ip if its not defined
+            src_ip = random_ip() if(self.source_ip==None) else self.source_ip
+            
             # Example: Invalid TCP flag values, seq value, ack value, IP version, etc.
-            packet = IP(src=random_ip(), dst=self.target_ip, version=6)/TCP(dport=self.target_port, flags=random.randint(0,999), seq=random.randint(1000000, 9999999999),  ack=random.randint(100000,9999999999))  # error in flags and invalid seq number
-
-            """ # Example 3: Invalid IP version
-            packet3 = IP(src=random_ip(), dst=self.target_ip, version=6)/TCP(dport=self.target_port)  # Force IPv6 version in IPv4 packet
- """
-            """ invalidPackets = {
-                "InavlidFlags": packet1,
-                "InvalidSeq": packet2,
-                #"InvalidIPVersion": packet3
-            }
-            packetType = random.choice(list(invalidPackets.keys()))    """
+            packet = IP(src=src_ip, dst=self.target_ip, version=6)/TCP(sport = random.randint(1, 60000), dport=(random.randint(1,60000) if(self.target_port==None) else self.target_port), flags=random.randint(0,999), seq=random.randint(1000000, 4294967295),  ack=random.randint(100000,4294967295))  # error in flags and invalid seq number
             #print("Sending malformed packet to IP: " + self.target_ip + "/" + str(self.target_port))
             send(packet, verbose=True)
 
@@ -434,15 +474,18 @@ class MalformedPacketsInjector(NetworkLoadInjector):
     def fromJSON(cls, job):
         tag=(job['tag'] if 'tag' in job else '')
         duration_ms=(job['duration_ms'] if 'duration_ms' in job else 1000)
+        source_ip = (job['source_ip'] if 'source_ip' in job else None)
         target_ip=(job['target_ip'] if 'target_ip' in job else '127.0.0.1')
-        target_port=(job['target_port'] if 'target_port' in job else 13000)
-        return MalformedPacketsInjector(tag, duration_ms, target_ip, target_port)
+        target_port=(job['target_port'] if 'target_port' in job else 80)
+        return MalformedPacketsInjector(tag, duration_ms, source_ip, target_ip, target_port)
         
 
 
 
+
+
 class ProtocolAnomaliesInjector(NetworkLoadInjector):
-    def __init__(self, tag: str = '', duration_ms: float = 1000, target_ip: str = "127.0.0.1", target_port: int = 13000):
+    def __init__(self, tag: str = '', duration_ms: float = 1000, target_ip: str = "127.0.0.1", target_port: int = 80):
         super().__init__(tag, duration_ms, target_ip)
         self.chosen_method = self.protocol_anomalies
     
@@ -452,8 +495,10 @@ class ProtocolAnomaliesInjector(NetworkLoadInjector):
         """
         print(f"[{self.tag}] Sending protocol anomalies to  {self.target_ip}/{self.target_port}")
         for _ in range(num_packets):
-            # Send ICMP Echo packets (ping packets basically)
-            packet = IP(src=random_ip(), dst=self.target_ip)/ICMP()
+            # stacking more l3 layers togheter (this is wrong since they are the same level and cannot coexist). also adding a l4 layer after
+            l4_protocol = random.choice(L4_PROTOCOLS)
+            l3_protocol = random.choice(L3_PROTOCOLS)
+            packet = IP(src=random_ip(), dst=self.target_ip)/l3_protocol()/l4_protocol(sport = random.randint(1, 60000), dport=(random.randint(1,60000) if(self.target_port==None) else self.target_port))
             send(packet,   verbose=False)           
     
     def get_name(self) -> str:
@@ -467,56 +512,71 @@ class ProtocolAnomaliesInjector(NetworkLoadInjector):
         tag=(job['tag'] if 'tag' in job else ''),
         duration_ms=(job['duration_ms'] if 'duration_ms' in job else 1000),
         target_ip=(job['target_ip'] if 'target_ip' in job else '127.0.0.1'),
-        target_port=(job['target_port'] if 'target_port' in job else 13000)
+        target_port=(job['target_port'] if 'target_port' in job else 80)
         return ProtocolAnomaliesInjector(tag, duration_ms, target_ip, target_port)
     
             
              
+             
+             
+             
+             
+             
+             
+             
 
- 
-""" 
-def pack_flooding():
+
+
+
+
+
+class DNSCachePoisoningInjector(NetworkLoadInjector):
+    def __init__(self, tag: str = '', duration_ms: float = 1000, source_ip: str = None, 
+                 target_ip: str = "127.0.0.1", target_port: int = 53, 
+                 poisoned_domain: str = "example.com", 
+                 malicious_ip: str = "127.0.0.1"):
+        super().__init__(tag, duration_ms, target_ip, target_port)
+        self.chosen_method = self.dns_poison
+        self.source_ip = source_ip
+        self.poisoned_domain = poisoned_domain
+        self.malicious_ip = malicious_ip
+    
+    #I want to specify that this attack method is mainly for generating realistic packets for this type of attack. for it to be really useful youd need to 
+    #get a packet from the target, checking the udp port of the connection and using his ip. This way you can send a response message(qr = 1), so that the dns server
+    #saves my(bad guy) ip into his cache for 24h(=ttl) and whenever i make a request to the server, he responds without checking since its in the cache
+    def dns_poison(self):
+        print(f"[{self.tag}] Sending DNS cache poisoning packets to {self.target_ip}/{self.target_port}")
+        end_time = time.time() + (self.duration_ms / 1000)
         
-        Simulate packet flooding by sending many SYN packets to a single port.
-        
-        #print(f"[{self.tag}] Starting packet flooding on {self.target_ip}/{self.target_port}")
-        end_time = time.time() + (5000 / 1000)
         while time.time() < end_time:
-            packet = IP(dst="127.0.0.1")/TCP(dport=13000, flags="S")
-            send(packet, verbose=False)
-
-
-
-def malf_packets(target_ip, target_port, num_times=10):
-    
-    Send malformed packets to the target.
-    
-    for _ in range(num_times):
-        # Example 1: Invalid TCP flag combination (SYN + FIN)
-        packet1 = IP(dst=target_ip)/TCP(dport=target_port, flags="SF")  # SYN+FIN
-        
-        # Example 2: Corrupted TCP sequence number
-        packet2 = IP(dst=target_ip)/TCP(dport=target_port, seq=42949672)  # Invalid seq number
-
-        # Example 3: Invalid IP version
-        packet3 = IP(dst=target_ip, version=6)/TCP(dport=target_port)  # Force IPv6 version in IPv4 packet
-
-        invalidPackets = {
-            "SYN+FIN": packet1,
-            "InvalidSeq": packet2,
-            "InvalidIPVersion": packet3
-        }
-        packetType = random.choice(list(invalidPackets.keys()))   
-        #print(f"chosen invalid packet: {packetType}")  
-        send(invalidPackets[packetType], verbose=False)
-        
-
-if __name__ == "__main__":
-    interf = show_interfaces()
-    print(interf)
-    payload = "X" * 1021
-    packet = IP(dst="127.0.0.1")/TCP(dport=13001)/payload
-    send(packet, verbose=True) 
-    #pack_flooding()
-    malf_packets("127.0.0.1", 13000, num_times=10) 
-"""
+            # Create spoofed response with high TTL
+            dns_response = (
+                IP(src=self.source_ip or random_ip(), dst=self.target_ip)/
+                UDP(sport=53, dport=self.target_port)/
+                DNS(
+                    qr=1,  # Response
+                    aa=1,  # Authoritative Answer
+                    rd=1,  # Recursion Desired
+                    ra=1,  # Recursion Available
+                    id=random.randint(0, 65535),  # Random transaction ID
+                    qd=DNSQR(qname=self.poisoned_domain),
+                    an=DNSRR(
+                        rrname=self.poisoned_domain,
+                        type='A',
+                        ttl=86400,  # 24 hours TTL
+                        rdata=self.malicious_ip
+                    )
+                )
+            )
+            send(dns_response, verbose=False)
+            
+    @classmethod
+    def fromJSON(cls, job):
+        tag = (job['tag'] if 'tag' in job else '')
+        duration_ms = (job['duration_ms'] if 'duration_ms' in job else 1000)
+        source_ip = (job['source_ip'] if 'source_ip' in job else None)
+        target_ip = (job['target_ip'] if 'target_ip' in job else '192.168.1.1')
+        target_port = (job['target_port'] if 'target_port' in job else 53)
+        poisoned_domain = (job['poisoned_domain'] if 'poisoned_domain' in job else 'example.com')
+        malicious_ip = (job['malicious_ip'] if 'malicious_ip' in job else '192.168.1.100')
+        return cls(tag, duration_ms, source_ip, target_ip, target_port, poisoned_domain, malicious_ip)

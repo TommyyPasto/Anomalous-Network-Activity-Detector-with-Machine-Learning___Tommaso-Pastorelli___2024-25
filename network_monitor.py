@@ -18,12 +18,36 @@
             """
 
 
+"""
+packet_info = {
+                "time": current_milli_time(),
+                "datetime": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                "sniff_timestamp": pkt.sniff_timestamp if hasattr(pkt, 'sniff_timestamp') else -1,
+                "protocol": pkt.highest_layer if hasattr(pkt, 'highest_layer') else -1,
+                "transport_layer": pkt.transport_layer if hasattr(pkt, 'transport_layer') else -1,
+                "src_ip": pkt.ip.src if hasattr(pkt, 'ip') else -1,
+                "dst_ip": pkt.ip.dst if hasattr(pkt, 'ip') else -1,
+                "packet_length": int(pkt.length) if hasattr(pkt, 'length') else -1,
+                "header_length": int(pkt[pkt.transport_layer].hdr_len) if hasattr(pkt.transport_layer,"hdr_len") else -1,
+                "checksum": pkt[pkt.transport_layer].checksum if hasattr(pkt.transport_layer, 'checksum') else -1,
+                "src_port": pkt[pkt.transport_layer].srcport if hasattr(pkt.transport_layer, 'srcport') else -1,
+                "dst_port": pkt[pkt.transport_layer].dstport if hasattr(pkt.transport_layer, "dstport") else -1,
+                "seq_number": pkt[pkt.transport_layer].seq if hasattr(pkt.transport_layer, "seq") else -1,
+                "ack_number": pkt[pkt.transport_layer].ack if hasattr(pkt.transport_layer, "ack") else -1,
+                "time_relative": pkt[pkt.transport_layer].time_relative if hasattr(pkt.transport_layer,"time_relative") else -1,
+                "time_delta": pkt[pkt.transport_layer].time_delta if hasattr(pkt.transport_layer, "time_delta") else -1,
+                "time_to_live": pkt.ip.ttl if hasattr(pkt, 'ip') else -1,
+                "flags": pkt[pkt.transport_layer].flags if hasattr(pkt.transport_layer,"flags") else -1,
+            }"""
+
+
 
 
 
 import csv
 import threading
 import pyshark
+from scapy.all import IP, TCP, UDP, ICMP, send, fragment, show_interfaces, Ether, ARP, srp1, conf, Raw, sniff, json
 from datetime import datetime
 import time
 
@@ -34,10 +58,13 @@ injection_semaphore = threading.Semaphore(0)
 def current_milli_time():
     return round(time.time() * 1000)
 
-def capture_and_save_network_traffic(interface, typeOfAnalysis, timeout, output_file):
+
+#Function for capturing data on "interface", with "timeout"
+def capture_traffic_data(interface, typeOfAnalysis, timeout) -> list:
     is_first_time = True
     print(f"Starting capture on interface: {interface}")
-    capture = pyshark.LiveCapture(interface=interface, bpf_filter ="dst 192.168.1.8")
+    capture = pyshark.LiveCapture(interface=interfaces, bpf_filter="dst 192.168.1.8")
+    #capture = sniff(iface="Software Loopback Interface 1", timeout=timeout)
     capture.sniff(timeout=timeout)
     capture.close()
     length = len(capture) #we have to save this before since the close() method doesnt really stop the capturing, if i do not save the length beforehand the loop will likely run indefinetely
@@ -48,29 +75,45 @@ def capture_and_save_network_traffic(interface, typeOfAnalysis, timeout, output_
         try:
             pkt = capture[i]
             packet_info = {
+                
+                #general layer 3 level features
                 "time": current_milli_time(),
                 "datetime": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                "sniff_timestamp": pkt.sniff_timestamp if hasattr(pkt, 'sniff_timestamp') else "Unknown",
-                "protocol": pkt.highest_layer,
-                "transport_layer": pkt.transport_layer if hasattr(pkt, 'transport_layer') else "Unknown",
-                "src_ip": pkt.ip.src if hasattr(pkt, 'ip') else "Unknown",
-                "dst_ip": pkt.ip.dst if hasattr(pkt, 'ip') else "Unknown",
-                "packet_length": int(pkt.length),
-                "header_length": int(pkt[pkt.transport_layer].hdr_len) if pkt.transport_layer in pkt else "Unknown",
-                "checksum": pkt[pkt.transport_layer].checksum if pkt.transport_layer in pkt else "Unknown",
-                "src_port": pkt[pkt.transport_layer].srcport if pkt.transport_layer in pkt else "Unknown",
-                "dst_port": pkt[pkt.transport_layer].dstport if pkt.transport_layer in pkt else "Unknown",
-                "seq_number": pkt[pkt.transport_layer].seq if pkt.transport_layer in pkt else "Unknown",
-                "ack_number": pkt[pkt.transport_layer].ack if pkt.transport_layer in pkt else "Unknown",
-                "time_relative": pkt[pkt.transport_layer].time_relative if pkt.transport_layer in pkt else "Unknown",
-                "time_delta": pkt[pkt.transport_layer].time_delta if pkt.transport_layer in pkt else "Unknown",
-                "time_to_live": pkt.ip.ttl if hasattr(pkt, 'ip') else "Unknown",
-                "flags": pkt[pkt.transport_layer].flags if pkt.transport_layer in pkt else "Unknown", 
+                "sniff_timestamp": pkt.sniff_timestamp if hasattr(pkt, 'sniff_timestamp') else -1,
+                "protocol": pkt.ip.proto if hasattr(pkt, 'ip') else -1,
+                "transport_layer": pkt.transport_layer if hasattr(pkt, 'transport_layer') else -1,
+                "src_ip": pkt.ip.src if hasattr(pkt, 'ip') else -1,
+                "dst_ip": pkt.ip.dst if hasattr(pkt, 'ip') else -1,
+                "packet_length": int(pkt.length) if hasattr(pkt, 'length') else -1,
+                "header_length": pkt.ip.hdr_len if hasattr(pkt.ip,"hdr_len") else -1,
+                "ip_flags": pkt.ip.flags,
+                "time_to_live": pkt.ip.ttl if hasattr(pkt, 'ip') else -1,
+                "time_relative": pkt.frame_info.time_relative if hasattr(pkt.frame_info,"time_relative") else -1,
+                "time_delta": pkt.frame_info.time_delta if hasattr(pkt.frame_info, "time_delta") else -1,
+                
+                #derived feature that aimes to help the model to distinguish better between fragmented and not frag. pkts
+                "is_fragmented": 1 if(pkt.ip.flags == "0x01" or pkt.ip.flags == "0x00") and pkt.transport_layer is None else 0, 
+                
+                #transport layer(layer 4) features(not filled when a fragmented packet injection is performed since only the first fragment has t.layer infos)
+                "checksum": pkt[pkt.transport_layer].checksum if(pkt.transport_layer is not None and hasattr(pkt[pkt.transport_layer], 'checksum')) else -1,
+                "src_port": pkt[pkt.transport_layer].srcport if(pkt.transport_layer is not None and hasattr(pkt[pkt.transport_layer], 'srcport')) else -1,
+                "dst_port": pkt[pkt.transport_layer].dstport if(pkt.transport_layer is not None and hasattr(pkt[pkt.transport_layer], "dstport")) else -1,
+                "seq_number": pkt[pkt.transport_layer].seq if pkt.transport_layer is not None and hasattr(pkt[pkt.transport_layer], "seq") else -1,
+                "ack_number": pkt[pkt.transport_layer].ack if pkt.transport_layer is not None and hasattr(pkt[pkt.transport_layer], "ack") else -1,
+                "flags": pkt[pkt.transport_layer].flags if pkt.transport_layer is not None and  hasattr(pkt[pkt.transport_layer],"flags") else -1,
+                
+                #layer 7 features for dns packets(1 attack)
+                "dns_query_type": pkt.dns.qry_type if hasattr(pkt, 'dns') else -1,
+                "dns_query_name": pkt.dns.qry_name if hasattr(pkt, 'dns') else -1,
+                "dns_response": pkt.dns.resp_name if hasattr(pkt, 'dns') else -1,
+                "dns_ttl": pkt.dns.ttl if hasattr(pkt, 'dns') else -1,
             }
-            
+           
             packet_info["label"] = "normal" if(typeOfAnalysis == "normal") else "anomalous"
             
             print(str(packet_info) + "\n")
+            #pkt.pretty_print()
+            print("-----------------------------------------------\n\n\n")
             packet_data.append(packet_info)
             
         except AttributeError as e:
@@ -80,9 +123,7 @@ def capture_and_save_network_traffic(interface, typeOfAnalysis, timeout, output_
     return packet_data
 
 
-
-
-
+#utility function for writing data to csv
 def write_to_csv(filename, data, is_first_time):
     with open(filename, 'a' if not is_first_time else 'w', newline="") as f:
         writer = csv.DictWriter(f, fieldnames=data[0].keys())
@@ -90,23 +131,27 @@ def write_to_csv(filename, data, is_first_time):
             writer.writeheader()
         writer.writerows(data)
 
+
+
+
+#main
 if __name__ == "__main__":
     output_file = "output/copy.csv"
-    interfaces = ["Wi-Fi", "Adapter for loopback traffic capture"]  # Replace with your network interface
+    interfaces = ["Adapter for loopback traffic capture"]  # Replace with your network interface
     
     from network_injector_main import read_injectors
     injectors = read_injectors("input/injectors_json.json", inj_duration=18000)
     try:
         
-        """ packets_data = capture_and_save_network_traffic(interface=interfaces, typeOfAnalysis="normal", timeout=600, output_file=output_file)
+        """  packets_data = capture_and_save_network_traffic(interface=interfaces, typeOfAnalysis="normal", timeout=600)
         write_to_csv(output_file, packets_data, is_first_time=True) """
         
-        for i in range(5):
-            print("remaining time: " + str(5-i))
+        for i in range(3):
+            print("remaining time: " + str(3-i))
             time.sleep(1)
         
         # Capture anomalous traffic during injections
-        packets_data = capture_and_save_network_traffic(interface=interfaces, typeOfAnalysis="anomalous", timeout=((3+2) * injectors.__len__()), output_file=output_file)
+        packets_data = capture_traffic_data(interface=interfaces, typeOfAnalysis="anomalous", timeout=((3+2) * injectors.__len__()))
         write_to_csv(output_file, packets_data, is_first_time=False)
             
     except KeyboardInterrupt:

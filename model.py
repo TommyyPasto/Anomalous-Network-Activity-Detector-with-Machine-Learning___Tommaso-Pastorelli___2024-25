@@ -36,7 +36,44 @@ def current_ms() -> int:
     return round(time.time() * 1000)
 
 def from_string_to_int(string):
-    return int(string, 16)
+    if string == None:
+        return None
+    else:
+        return int(string, 16)
+
+def protocol_number_to_name(protocol_number):
+    """
+    Translates a protocol number into its corresponding protocol name.
+    
+    :param protocol_number: int, the protocol number to translate
+    :return: str, the protocol name or 'Unknown Protocol' if not found
+    """
+    protocol_mapping = {
+        0: "HOPOPT (IPv6 Hop-by-Hop Option)",
+        1: "ICMP (Internet Control Message Protocol)",
+        2: "IGMP (Internet Group Management Protocol)",
+        3: "GGP (Gateway-to-Gateway Protocol)",
+        4: "IPv4 (IP in IP encapsulation)",
+        6: "TCP (Transmission Control Protocol)",
+        8: "EGP (Exterior Gateway Protocol)",
+        17: "UDP (User Datagram Protocol)",
+        41: "IPv6 (IPv6 encapsulation)",
+        43: "IPv6-Route (Routing Header for IPv6)",
+        44: "IPv6-Frag (Fragment Header for IPv6)",
+        47: "GRE (Generic Routing Encapsulation)",
+        50: "ESP (Encapsulating Security Payload)",
+        51: "AH (Authentication Header)",
+        58: "ICMPv6 (ICMP for IPv6)",
+        59: "IPv6-NoNxt (No Next Header for IPv6)",
+        60: "IPv6-Opts (Destination Options for IPv6)",
+        88: "EIGRP (Enhanced Interior Gateway Routing Protocol)",
+        89: "OSPF (Open Shortest Path First)",
+        132: "SCTP (Stream Control Transmission Protocol)"
+    }
+    
+    return protocol_mapping.get(protocol_number, "Unknown Protocol")
+
+from network_monitor import write_to_csv
 
 if __name__ == "__main__":
     """
@@ -49,27 +86,41 @@ if __name__ == "__main__":
     dataset = read_csv(dataset_path)
     testing_dataset = read_csv(testing_path)
     
+    dataset["protocol"] = dataset["protocol"].apply(protocol_number_to_name)
+
+    
+    write_to_csv(dataset_path, dataset, True)
+    
+    
+    
+    
+    
+    exit(0)
+    
+    
+    
+    
     # Initialize LabelEncoder
     encoder = LabelEncoder()
 
     # Fit and transform the 'protocol' column
-    dataset["protocol"] = encoder.fit_transform(dataset["protocol"])
+    dataset["transport_layer"] = encoder.fit_transform(dataset["transport_layer"])
     dataset["src_ip"] = dataset["src_ip"].apply(ip_to_binary)
     dataset["checksum"] = dataset["checksum"].apply(from_string_to_int)
     dataset["flags"] = dataset["flags"].apply(from_string_to_int)
     
     # Extract labels and features
     label_obj = dataset["label"]
-    data_obj = dataset.drop(columns=["label", "time", "datetime", "sniff_timestamp", "dst_ip", "transport_layer"])  # Drop non-feature columns
+    data_obj = dataset.drop(columns=["label", "time", "datetime", "sniff_timestamp", "dst_ip"])#, "ack_number", "seq_number"])  # Drop non-feature columns
     data_obj, label_obj = shuffle(data_obj, label_obj, random_state = 20)  # Shuffle the dataset
 
-    testing_dataset["protocol"] = encoder.fit_transform(testing_dataset["protocol"])
+    testing_dataset["transport_layer"] = encoder.fit_transform(testing_dataset["transport_layer"])
     testing_dataset["src_ip"] = testing_dataset["src_ip"].apply(ip_to_binary)
     testing_dataset["checksum"] = testing_dataset["checksum"].apply(from_string_to_int)
     testing_dataset["flags"] = testing_dataset["flags"].apply(from_string_to_int)
     
     testing_labels_obj = testing_dataset["label"]
-    testing_dataset_obj = testing_dataset.drop(columns=["label", "time", "datetime", "sniff_timestamp", "dst_ip", "transport_layer"])  # Drop non-feature columns
+    testing_dataset_obj = testing_dataset.drop(columns=["label", "time", "datetime", "sniff_timestamp", "dst_ip"])#, "ack_number", "seq_number"])  # Drop non-feature columns
     testing_dataset_obj, testing_labels_obj = shuffle(testing_dataset_obj, testing_labels_obj, random_state = 20)  # Shuffle the dataset
     
 
