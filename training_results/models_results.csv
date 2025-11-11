@@ -1,0 +1,2 @@
+classifier,accuracy,train_time,test_time,tp,tn,fp,fn,f1_normal,f1_anomalous,mcc
+RandomForestClassifier,0.9969356486210419,37,3,193,783,3,0,0.9922879177377892,0.9980879541108987,0.9904218818122819
