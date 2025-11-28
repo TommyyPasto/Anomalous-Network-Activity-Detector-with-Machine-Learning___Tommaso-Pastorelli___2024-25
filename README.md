@@ -35,7 +35,7 @@ The effectiveness of these algorithms will be evaluated using:
 - **F1 Score:** The weighted average of precision and recall, which considers both false positives and false negatives.
 
 ## Project Status
-This project is still under development. Usage and installation instructions will be provided once the project is complete.
+COMPLETED ✓
 
 ## Repository Details
 - **Repository Name:** Anomalous-Network-Activity-Detector-with-Machine-Learning---Tommaso-Pastorelli---2024-25
